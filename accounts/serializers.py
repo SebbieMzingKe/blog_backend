@@ -38,4 +38,14 @@ class SignUpSerializer(serializers.ModelSerializer):
         return user
     
 
-     
+class CurrentUserBlogSerializer(serializers.ModelSerializer):
+
+    blogs = serializers.HyperlinkedRelatedField(
+        many = True,
+        view_name= "blog_detail",
+        queryset = User.objects.all()
+        )
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'blogs']
+ 

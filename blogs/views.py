@@ -1,18 +1,155 @@
 from rest_framework.request import Request
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, generics, mixins
 from rest_framework.request import Request
 from rest_framework.response import Response 
 from .models import Blog
 from blogs.serializers import BlogSerializer
 from django.shortcuts import get_object_or_404
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import (AllowAny, 
+IsAuthenticated,
+IsAuthenticatedOrReadOnly,
+IsAdminUser
+)
+from rest_framework.decorators import api_view, permission_classes
+from accounts.serializers import CurrentUserBlogSerializer
+from .permissions import ReadOnly, AuthororReadOnly
+from drf_yasg.utils import swagger_auto_schema
 
 
-class BlogViewset(viewsets.ModelViewSet):
+# class BlogViewset(viewsets.ModelViewSet):
+#     queryset = Blog.objects.all()
+#     serializer_class = BlogSerializer
+#     permission_classes = [IsAuthenticated]
+
+@api_view(http_method_names = ["GET", "POST"])
+@permission_classes([AllowAny])
+def homepage(request):
+    response = {"message":"Hello World"}
+
+    if request.method == "POST":
+        data = request.data
+        response = {"message":"Hello World", "data":data}
+        return Response(data=response, status=status.HTTP_201_CREATED)
+        
+    return Response(data = response, status = status.HTTP_200_OK)
+
+   
+class BlogListCreateView(generics.GenericAPIView,
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin
+):
+    """
+    a view for creating and listing blogs
+    """
+    serializer_class = BlogSerializer
+    queryset = Blog.objects.all()
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        
+        serializer.save(author = user)
+        return super().perform_create(serializer)
+
+    @swagger_auto_schema(
+            operation_summary="List all blogs",
+            operation_description="This returns a list of all blogs"
+    )
+    def get(self, request:Request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+            operation_summary="Create a blog",
+            operation_description="Creates a blog"
+    )
+    def post(self, request:Request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+
+
+    
+class BlogRetrieveUpdateDeleteView(generics.GenericAPIView,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin
+
+):
+    serializer_class = BlogSerializer
+    queryset = Blog.objects.all()
+    permission_classes = [AuthororReadOnly]
+
+
+    @swagger_auto_schema(
+            operation_summary="Retrieve a blog by id",
+            operation_description="This retrieves a blog by its id"
+    )
+    def get(self, request:Request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
+
+
+    @swagger_auto_schema(
+            operation_summary="Updates a blog by its id",
+            operation_description="This updates a blog by its id"
+    )
+    def put(self, request:Request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+
+    @swagger_auto_schema(
+            operation_summary="Deletes a blog by its id",
+            operation_description="This deletes a blog by its id"
+    )
+    def delete(self, request:Request, *args, **kwargs):
+        return self.destroy(request, *args, **kwargs)
+
+@api_view(http_method_names = ["GET"])
+@permission_classes([IsAuthenticated])
+def get_blog_for_current_user(request:Request):
+    user = request.user
+
+    serializer = CurrentUserBlogSerializer(instance = user, 
+    context =  {"request":request}
+    )
+
+    return Response(data= serializer.data, status= status.HTTP_200_OK)
+
+
+
+class ListBlogForAuthor(
+    generics.GenericAPIView,
+    mixins.ListModelMixin
+):
+    
     queryset = Blog.objects.all()
     serializer_class = BlogSerializer
     permission_classes = [IsAuthenticated]
-    
+
+    def get_queryset(self):
+        username = self.request.query_params.get("username") or None
+
+        queryset = Blog.objects.all()
+
+        if username is not None:
+            return Blog.objects.filter(author__username = username)
+        
+        return queryset
+
+
+
+    @swagger_auto_schema(
+            operation_summary="Lists blogs for a author (user)",
+            operation_description="This lists blogs for an author"
+    )
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+
+
+
+
+
+
+
+
+
     # def list(self, request:Request):
     #     queryset = Blog.objects.all()
     #     serializer = BlogSerializer(instance=queryset, many = True)
